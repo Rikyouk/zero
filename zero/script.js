@@ -335,4 +335,127 @@ document.addEventListener('DOMContentLoaded', function() {
             addFood(food);
         });
     });
+
+    // AI 对话功能
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+    const chatMessages = document.getElementById('chatMessages');
+
+    // 发送消息
+    function sendMessage() {
+        const message = chatInput.value.trim();
+        if (!message) return;
+
+        // 添加用户消息到界面
+        addMessage(message, 'user');
+        chatInput.value = '';
+
+        // 显示正在输入指示器
+        showTypingIndicator();
+
+        // 调用 DeepSeek API
+        callDeepSeekAPI(message);
+    }
+
+    // 添加消息到界面
+    function addMessage(text, type) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}-message`;
+        messageDiv.textContent = text;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // 显示正在输入指示器
+    function showTypingIndicator() {
+        const indicator = document.createElement('div');
+        indicator.className = 'typing-indicator';
+        indicator.id = 'typingIndicator';
+        indicator.innerHTML = '<span></span><span></span><span></span>';
+        chatMessages.appendChild(indicator);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // 移除正在输入指示器
+    function removeTypingIndicator() {
+        const indicator = document.getElementById('typingIndicator');
+        if (indicator) {
+            indicator.remove();
+        }
+    }
+
+    // 调用 DeepSeek API
+    async function callDeepSeekAPI(userMessage) {
+        const env = loadEnv();
+        const apiKey = env.DEEPSEEK_API_KEY;
+
+        // 检查是否配置了 API Key
+        if (!apiKey || apiKey === 'your_deepseek_api_key_here') {
+            removeTypingIndicator();
+            addMessage('请先在 env.js 中配置您的 DeepSeek API Key，然后才能使用 AI 对话功能。', 'ai');
+            return;
+        }
+
+        try {
+            // 构建提示词，结合美食顾问角色
+            const systemPrompt = `你是一个专业的美食顾问，擅长：
+1. 推荐各种美食和菜品
+2. 提供菜谱和烹饪建议
+3. 解答关于食材搭配、饮食健康的问题
+4. 根据用户的忌口推荐合适的菜品
+5. 分享美食文化和烹饪技巧
+
+请用友好、简洁的中文回答用户的问题。`;
+
+            const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: 'deepseek-chat',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: systemPrompt
+                        },
+                        {
+                            role: 'user',
+                            content: userMessage
+                        }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 1000
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API 请求失败: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const aiResponse = data.choices[0].message.content;
+
+            removeTypingIndicator();
+            addMessage(aiResponse, 'ai');
+
+        } catch (error) {
+            console.error('DeepSeek API 调用失败:', error);
+            removeTypingIndicator();
+            addMessage('抱歉，AI 顾问暂时无法回答您的问题，请稍后再试或检查 API Key 配置。', 'ai');
+        }
+    }
+
+    // 绑定事件
+    chatSendBtn.addEventListener('click', sendMessage);
+
+    chatInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    // 添加欢迎消息
+    addMessage('您好！我是您的 AI 美食顾问。我可以帮您推荐美食、提供菜谱建议、解答烹饪问题。请问有什么可以帮您的？', 'ai');
 });
