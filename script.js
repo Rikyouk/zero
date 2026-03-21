@@ -384,66 +384,46 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 调用 DeepSeek API
+    // 调用后端 API 代理
     async function callDeepSeekAPI(userMessage) {
-        const env = loadEnv();
-        const apiKey = env.DEEPSEEK_API_KEY;
-
-        // 检查是否配置了 API Key
-        if (!apiKey || apiKey === 'your_deepseek_api_key_here') {
-            removeTypingIndicator();
-            addMessage('请先在 env.js 中配置您的 DeepSeek API Key，然后才能使用 AI 对话功能。', 'ai');
-            return;
-        }
-
         try {
-            // 构建提示词，结合美食顾问角色
-            const systemPrompt = `你是一个专业的美食顾问，擅长：
-1. 推荐各种美食和菜品
-2. 提供菜谱和烹饪建议
-3. 解答关于食材搭配、饮食健康的问题
-4. 根据用户的忌口推荐合适的菜品
-5. 分享美食文化和烹饪技巧
-
-请用友好、简洁的中文回答用户的问题。`;
-
-            const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            // 调用后端 API，同时传递用户的菜品列表和忌口列表用于增强提示
+            const response = await fetch('http://localhost:5000/api/chat', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: 'deepseek-chat',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: systemPrompt
-                        },
-                        {
-                            role: 'user',
-                            content: userMessage
-                        }
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 1000
+                    message: userMessage,
+                    foodList: foodList,
+                    avoidList: avoidList
                 })
             });
 
+            const data = await response.json();
+
             if (!response.ok) {
-                throw new Error(`API 请求失败: ${response.status}`);
+                throw new Error(data.error || `API 请求失败: ${response.status}`);
             }
 
-            const data = await response.json();
-            const aiResponse = data.choices[0].message.content;
+            const aiResponse = data.response;
 
             removeTypingIndicator();
             addMessage(aiResponse, 'ai');
 
         } catch (error) {
-            console.error('DeepSeek API 调用失败:', error);
+            console.error('后端 API 调用失败:', error);
             removeTypingIndicator();
-            addMessage('抱歉，AI 顾问暂时无法回答您的问题，请稍后再试或检查 API Key 配置。', 'ai');
+            
+            // 更友好的错误提示
+            let errorMsg = '抱歉，AI 顾问暂时无法回答您的问题，请稍后再试。';
+            if (error.message.includes('API Key')) {
+                errorMsg = '请先在后端 .env 文件中配置您的 DeepSeek API Key。';
+            } else if (error.message.includes('Failed to fetch')) {
+                errorMsg = '无法连接到后端服务，请确保后端服务已启动（运行 python server.py）。';
+            }
+            
+            addMessage(errorMsg, 'ai');
         }
     }
 
