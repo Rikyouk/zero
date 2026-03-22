@@ -384,11 +384,36 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // 获取后端 API 地址（自动检测环境）
+    function getBackendApiUrl() {
+        const env = loadEnv();
+        
+        // 如果配置了后端地址，直接使用
+        if (env.BACKEND_API_URL) {
+            return env.BACKEND_API_URL;
+        }
+        
+        // 否则，根据当前环境自动推断
+        const hostname = window.location.hostname;
+        
+        // 本地开发环境
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
+            return 'http://localhost:5000/api';
+        }
+        
+        // 生产环境（部署到 EdgeOne 后）
+        // 方案1：使用相对路径，需要后端同域名部署
+        // 方案2：配置固定的后端域名（推荐，需要后端支持CORS）
+        return '/api';  // 使用相对路径，依赖反向代理配置
+    }
+
     // 调用后端 API 代理
     async function callDeepSeekAPI(userMessage) {
         try {
+            const apiUrl = getBackendApiUrl() + '/chat';
+            
             // 调用后端 API，同时传递用户的菜品列表和忌口列表用于增强提示
-            const response = await fetch('http://localhost:5000/api/chat', {
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -419,8 +444,13 @@ document.addEventListener('DOMContentLoaded', function() {
             let errorMsg = '抱歉，AI 顾问暂时无法回答您的问题，请稍后再试。';
             if (error.message.includes('API Key')) {
                 errorMsg = '请先在后端 .env 文件中配置您的 DeepSeek API Key。';
-            } else if (error.message.includes('Failed to fetch')) {
-                errorMsg = '无法连接到后端服务，请确保后端服务已启动（运行 python server.py）。';
+            } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                const hostname = window.location.hostname;
+                if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                    errorMsg = '无法连接到后端服务，请确保后端服务已启动（运行 python server.py）。';
+                } else {
+                    errorMsg = '无法连接到后端服务，请检查后端服务配置或联系管理员。';
+                }
             }
             
             addMessage(errorMsg, 'ai');

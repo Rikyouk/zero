@@ -8,11 +8,27 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # 允许跨域请求
+
+# CORS 配置 - 支持灵活的跨域设置
+# 从环境变量读取允许的源，多个源用逗号分隔
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '*').split(',')
+
+# 配置 CORS
+if ALLOWED_ORIGINS == ['*']:
+    # 开发模式：允许所有源
+    CORS(app)
+else:
+    # 生产模式：只允许指定的源
+    CORS(app, origins=ALLOWED_ORIGINS)
 
 # 配置
 DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
+
+# 服务器配置
+HOST = os.getenv('HOST', '0.0.0.0')
+PORT = int(os.getenv('PORT', 5000))
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 # 系统提示词 - 现在可以在后端统一管理
 SYSTEM_PROMPT = """角色定位：你是一个专业的美食顾问，为用户提供友好、专业的餐饮建议。
@@ -101,8 +117,11 @@ def health_check():
     })
 
 if __name__ == '__main__':
-    print('=' * 50)
+    print('=' * 60)
     print('美食顾问后端服务启动中...')
+    print(f'运行模式: {"开发模式" if DEBUG else "生产模式"}')
+    print(f'监听地址: {HOST}:{PORT}')
     print(f'API Key 已配置: {"是" if DEEPSEEK_API_KEY and DEEPSEEK_API_KEY != "your_deepseek_api_key_here" else "否"}')
-    print('=' * 50)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print(f'允许的CORS源: {ALLOWED_ORIGINS}')
+    print('=' * 60)
+    app.run(host=HOST, port=PORT, debug=DEBUG)

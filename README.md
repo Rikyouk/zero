@@ -91,35 +91,187 @@ python server.py
 - **前端页面**：可部署到 EdgeOne、CDN 等静态托管服务
 - **后端API**：需要部署到支持 Python 的服务器
 
-### EdgeOne 部署（前端静态页面）
+### EdgeOne 完整部署方案
 
-1. **准备工作**
-   - 确保项目已上传到 GitHub 仓库
-   - 注册并登录 EdgeOne 控制台
+项目采用**前后端分离架构**，需要分别部署前端页面和后端API服务。
 
-2. **部署步骤**
-   - 在 EdgeOne 控制台中创建新的站点
-   - 选择 "GitHub 部署"
-   - 连接你的 GitHub 账号
-   - 选择本仓库
-   - 配置部署设置（使用默认设置即可）
-   - 点击 "部署"
+---
 
-3. **注意事项**
-   - EdgeOne 仅托管前端静态页面
-   - AI 功能需要单独部署后端服务
+#### 🏗️ 部署架构总览
 
-### 环境变量配置
-
-项目使用 `.env` 文件存储配置：
 ```
-# Supabase 配置
+┌─────────────────────────────────────────────────────────┐
+│ 用户浏览器                                               │
+│    ┌───────────────────┐     ┌──────────────────────┐   │
+│    │   前端静态页面     │────►│   EdgeOne CDN        │   │
+│    │ (HTML/CSS/JS)     │     │ (托管前端静态资源)    │   │
+│    └───────────────────┘     └──────────────────────┘   │
+│              │                                           │
+│              ▼                                           │
+│    ┌───────────────────┐     ┌──────────────────────┐   │
+│    │   AI聊天请求      │────►│   后端API服务        │   │
+│    │   /api/chat       │     │ (Python/Flask)       │   │
+│    └───────────────────┘     └──────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 📦 方案一：独立域名部署（推荐）
+
+**架构说明**：
+- 前端：EdgeOne CDN（如 `https://eat.example.com`）
+- 后端：独立服务器（如 `https://api.eat.example.com`）
+- 优点：架构清晰，易于维护和扩展
+
+**部署步骤**：
+
+##### 步骤1：部署前端到 EdgeOne
+
+```bash
+1. 登录 EdgeOne 控制台
+2. 创建新站点 → 选择 "GitHub 部署"
+3. 连接 GitHub 账号 → 选择本仓库
+4. 配置部署设置：
+   - 构建命令：无需配置
+   - 输出目录：./ （根目录）
+   - 环境变量：无需配置（前端已自动检测）
+5. 点击 "部署" → 等待部署完成
+6. 绑定你的域名（如 eat.example.com）
+```
+
+##### 步骤2：部署后端API服务
+
+选择以下任一方式部署后端：
+
+**选项A：使用云服务器**
+```bash
+# 1. 在云服务器上安装 Python 3.8+
+# 2. 克隆代码
+git clone https://github.com/Rikyouk/zero.git
+cd zero
+
+# 3. 安装依赖
+pip install flask flask-cors python-dotenv requests
+
+# 4. 配置环境变量（重要！）
+vi .env
+# 修改以下配置：
+# ALLOWED_ORIGINS=https://eat.example.com
+# DEEPSEEK_API_KEY=你的API密钥
+# DEBUG=False
+
+# 5. 启动服务（生产模式推荐使用 gunicorn）
+pip install gunicorn
+gunicorn -w 4 -b 0.0.0.0:5000 server:app --daemon
+```
+
+**选项B：使用 Serverless 函数**
+- 腾讯云函数 SCF / 阿里云函数计算 FC
+- 将 `server.py` 改造为 Serverless 函数
+
+##### 步骤3：配置前后端连通
+
+```bash
+# 方法1：在 env.js 中配置后端地址（推荐）
+# 修改 env.js：
+BACKEND_API_URL: 'https://api.eat.example.com'
+
+# 方法2：在 EdgeOne 配置反向代理
+# 将 /api/* 请求转发到你的后端服务
+# 需要在 EdgeOne 控制台配置 "规则引擎" 或 "回源配置"
+```
+
+---
+
+#### 🔄 方案二：同域名反向代理（最简单）
+
+**架构说明**：
+- 所有请求都经过 EdgeOne
+- 静态请求由 EdgeOne 直接响应
+- API 请求由 EdgeOne 转发到后端服务
+- 优点：前端无需额外配置，避免跨域问题
+
+**部署步骤**：
+
+1. **部署前端到 EdgeOne**（同方案一步骤1）
+
+2. **在 EdgeOne 控制台配置反向代理规则**：
+   ```
+   匹配路径：/api/*
+   转发动作：回源到你的后端服务器地址
+   回源地址：https://api.eat.example.com/api/*
+   ```
+
+3. **部署后端服务**（同方案一步骤2）
+   ```
+   # .env 配置：
+   ALLOWED_ORIGINS=https://eat.example.com
+   ```
+
+---
+
+#### 🔧 环境变量配置说明
+
+后端 `.env` 文件关键配置项：
+
+```env
+# =============================================================================
+# 生产环境关键配置
+# =============================================================================
+
+# 运行模式（生产环境设为 False）
+DEBUG=False
+
+# CORS 跨域配置（重要！只允许你的前端域名）
+# 多个域名用逗号分隔
+ALLOWED_ORIGINS=https://eat.example.com,https://www.eat.example.com
+
+# DeepSeek API Key（AI功能必需）
+DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# =============================================================================
+# 可选配置
+# =============================================================================
+
+# 服务端口（默认5000）
+PORT=5000
+
+# Supabase 配置（用于菜品数据云端同步）
 SUPABASE_URL=https://lvhluqnuztzfsvpuzbad.supabase.co
 SUPABASE_ANON_KEY=你的密钥
-
-# DeepSeek API 配置（后端使用）
-DEEPSEEK_API_KEY=你的DeepSeek API密钥
 ```
+
+---
+
+#### ✅ 部署验证清单
+
+```
+✅ 前端部署验证：
+   [ ] 访问前端域名，页面正常加载
+   [ ] 菜品添加/删除功能正常
+   [ ] 随机推荐功能正常
+
+✅ 后端部署验证：
+   [ ] 访问 https://api.eat.example.com/api/health，返回 {"status":"ok"}
+   [ ] 检查 API Key 配置状态：api_key_configured: true
+
+✅ 前后端连通验证：
+   [ ] 在前端页面测试 AI 聊天功能
+   [ ] 浏览器控制台无跨域(CORS)错误
+   [ ] AI 能够正常返回回答
+```
+
+---
+
+#### ❓ 常见问题排查
+
+| 问题现象 | 可能原因 | 解决方案 |
+|---------|---------|---------|
+| 前端显示"无法连接到后端服务" | 后端服务未启动或地址错误 | 1. 检查后端服务是否运行<br>2. 检查 `BACKEND_API_URL` 配置<br>3. 检查防火墙/安全组配置 |
+| 浏览器控制台显示 CORS 错误 | 后端 CORS 配置不正确 | 检查 `.env` 中 `ALLOWED_ORIGINS` 是否包含前端域名 |
+| AI 无响应，显示"API Key未配置" | 后端未正确配置 DeepSeek API Key | 检查 `.env` 中 `DEEPSEEK_API_KEY` |
+| 本地正常但部署后无法使用 | 生产环境配置问题 | 1. 确认 `DEBUG=False`<br>2. 确认 `ALLOWED_ORIGINS` 正确配置<br>3. 检查后端服务日志 |
 
 ## 使用说明
 
