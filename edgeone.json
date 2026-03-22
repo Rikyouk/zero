@@ -1,0 +1,27 @@
+{
+  "name": "today-eat-what",
+  "framework": "static",
+  "build": {
+    "command": "",
+    "outputDir": ".",
+    "env": {}
+  },
+  "functions": {
+    "dir": "edge-functions",
+    "node": {
+      "version": "18"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/*",
+      "dest": "/edge-functions/$1",
+      "type": "function"
+    },
+    {
+      "src": "/*",
+      "dest": "/$1",
+      "type": "static"
+    }
+  ]
+}
